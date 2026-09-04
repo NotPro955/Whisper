@@ -20,9 +20,9 @@ use crate::protocol::{
 use crate::google_api::{fetch_anti_spoofing_key, DeviceAntiSpoofingInfo};
 use crate::hci::{HciMonitor, HciEvent, att_error_name, hci_index_for_adapter};
 
-const NOTIFY_STABILISE_MS: u64 = 300;
-const RETRY_DELAY_MS: u64 = 800;
-const MAX_RETRIES: usize = 3;
+const NOTIFY_STABILISE_MS: u64 = 150;
+const RETRY_DELAY_MS: u64 = 300;
+const MAX_RETRIES: usize = 1;
 const EXTENDED_TIMEOUT_SECS: f64 = 10.0;
 
 #[derive(Debug, Clone, PartialEq)]
