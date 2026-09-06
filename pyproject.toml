@@ -12,6 +12,7 @@ dependencies = [
     "cryptography",
     "dbus-next",
     "numpy",
+    "pytest-asyncio",
     "sounddevice",
 ]
 

@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 
 from .audio.devices import discover_audio_devices
+from .audio.playback import generate_demo_wave
 from .bluetooth.bluez import BlueZ, BlueZError
 from .bluetooth.pairing import BluetoothPairing, PairingError
 from .fastpair.capabilities import (
@@ -25,7 +26,7 @@ def print_separator() -> None:
 
 
 def consent_prompt(device) -> bool:
-    print_header("AUTHORIZATION REQUIRED")
+    print_header("AUTHORIZED EDUCATIONAL TEST ONLY")
 
     print("Target selected:")
     print(f"  Device:  {device.name}")
@@ -35,22 +36,37 @@ def consent_prompt(device) -> bool:
     print("WARNING")
     print("-------")
     print(
-        "Whisper Pair will connect to this selected Bluetooth "
-        "device and perform the authorized demonstration."
+        "This program is for educational purposes only and"
+        " for testing on a device that you own or that the"
+        " owner has explicitly authorized before testing."
     )
     print()
     print(
-        "Only continue if you own this device or have "
-        "explicit permission to test it."
+        "It must never be used on an arbitrary nearby device,"
+        " a public device, or any device without permission."
     )
     print()
-    print("No other discovered device will be contacted.")
+    print(
+        "Whisper Pair will only interact with the single selected"
+        " target and will not scan or contact other devices."
+    )
     print()
-    print('Type exactly "I accept" to continue.')
+    print(
+        "If you do not own this device or do not have explicit"
+        " permission, exit immediately now."
+    )
+    print()
+    print(
+        'Type exactly "I accept this educational test on an authorized device" '
+        "to continue."
+    )
     print("Anything else cancels the demonstration.")
     print()
 
-    return input("> ").strip() == "I accept"
+    return (
+        input("> ").strip()
+        == "I accept this educational test on an authorized device"
+    )
 
 
 def display_devices(devices) -> None:
@@ -446,6 +462,71 @@ async def record_bluetooth_microphone(source: str) -> str | None:
         return None
 
 
+async def play_demo_audio_on_bluetooth(device) -> str | None:
+    """Generate a local WAV and play it through the selected Bluetooth output."""
+    print_header("BLUETOOTH AUDIO PLAYBACK")
+
+    recordings_dir = Path("recordings")
+    recordings_dir.mkdir(parents=True, exist_ok=True)
+    demo_path = recordings_dir / "demo.wav"
+
+    generated = generate_demo_wave(demo_path)
+
+    print(f"Target:  {device.name}")
+    print(f"Address: {device.address}")
+    print(f"Demo file: {generated}")
+    print()
+    print("This stage uses a normal local WAV file and a normal Bluetooth audio output.")
+    print("It does not use the Fast Pair Audio Switch exploit path.")
+    print()
+
+    try:
+        outputs, _ = await discover_audio_devices()
+    except Exception as exc:
+        print("Could not query PipeWire audio devices.")
+        print(f"Reason: {exc}")
+        return None
+
+    bluetooth_outputs = [
+        audio_device
+        for audio_device in outputs
+        if audio_device.identifier.startswith("bluez_output.")
+    ]
+
+    if not bluetooth_outputs:
+        print("No bluez_output.* device is available in PipeWire.")
+        return None
+
+    selected_output = bluetooth_outputs[0].identifier
+    print(f"Selected output: {selected_output}")
+    print()
+    print("Playback is a normal local demo tone using the selected Bluetooth output")
+    print("through PipeWire.")
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "pw-play",
+            "--target",
+            selected_output,
+            str(generated),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            error = stderr.decode(errors="replace").strip()
+            print("Demo playback failed.")
+            print(error or "pw-play returned a failure code.")
+            return None
+
+        print("Demo playback completed.")
+        return generated
+    except FileNotFoundError:
+        print("pw-play was not found. Install pipewire-pulse to play audio.")
+        return None
+
+
 async def async_main() -> None:
     print_header("WHISPER PAIR")
 
@@ -487,8 +568,10 @@ async def async_main() -> None:
     print("Authorization accepted.")
     print()
     print(
-        "Only the selected device will be contacted during "
-        "this demonstration."
+        "This is an authorized educational security demonstration for the selected device only."
+    )
+    print(
+        "No other target will be contacted, and the flow stops immediately if the device is not explicitly authorized."
     )
 
     try:
@@ -526,6 +609,14 @@ async def async_main() -> None:
             "Bluetooth is connected, but PipeWire did not "
             "expose a Bluetooth microphone source."
         )
+        return
+
+    demo_audio = await play_demo_audio_on_bluetooth(selected)
+
+    if demo_audio is None:
+        print()
+        print_header("PLAYBACK SKIPPED")
+        print("The normal Bluetooth output was not available for local audio playback.")
         return
 
     await record_bluetooth_microphone(source)
