@@ -3,6 +3,10 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+
 try:
     from . import protocol
 except ImportError:  # pragma: no cover - support direct script execution
@@ -10,6 +14,14 @@ except ImportError:  # pragma: no cover - support direct script execution
 
 logger = logging.getLogger("FastPairService")
 ACCOUNT_KEY = b"\x04" + bytes.fromhex("370beacd6f09e6f70dfe7fc5ad20a9")
+
+
+def _generate_test_public_key() -> bytes:
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    return private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
+    )
 
 
 class AbstractDevice(ABC):
@@ -67,7 +79,7 @@ class AbstractFastPairService(ABC):
             raise RuntimeError("Target device does not have a Model ID.")
 
         log_fn("Generating key based pairing payload...")
-        mock_public_key = bytes.fromhex("0" * 128)
+        mock_public_key = _generate_test_public_key()
         msg_data = protocol.generate_key_based_pairing_message(self.device.address, mock_public_key)
         payload = msg_data["payload"]
         secret = msg_data["secret"]
@@ -115,20 +127,27 @@ class AbstractFastPairService(ABC):
         if not self.device.model_id:
             raise RuntimeError("Target device does not have a Model ID.")
 
-        mock_public_key = bytes.fromhex("0" * 128)
+        mock_public_key = _generate_test_public_key()
         msg_data = protocol.generate_key_based_pairing_message(self.device.address, mock_public_key)
         payload = msg_data["payload"]
 
-        for i in range(1, 4):
-            log_fn(f"Writing payload ({i}/3)...")
-            try:
-                await self.write_key_based_pairing(payload)
-                if i == 2:
-                    log_fn("Disconnecting and reconnecting...")
-                    await self.device.disconnect()
-                    await self.device.connect()
-            except Exception as exc:
-                log_fn(f"⚠️ Payload write {i} rejected or failed: {exc}")
+        async def on_notify(buffer: bytes):
+            log_fn(f"Device notification received ({len(buffer)} bytes)")
+
+        cleanup = await self.on_key_based_pairing_notify(on_notify)
+        try:
+            for i in range(1, 4):
+                log_fn(f"Writing payload ({i}/3)...")
+                try:
+                    await self.write_key_based_pairing(payload)
+                    if i == 2:
+                        log_fn("Disconnecting and reconnecting...")
+                        await self.device.disconnect()
+                        await self.device.connect()
+                except Exception as exc:
+                    log_fn(f"⚠️ Payload write {i} rejected or failed: {exc}")
+        finally:
+            cleanup()
 
         return "success"
 

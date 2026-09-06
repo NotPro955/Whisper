@@ -74,13 +74,14 @@ class _ServiceBase:
     async def write_key_based_pairing(self, data: bytes) -> None:
         await self.transport.write(data)
 
+    async def on_key_based_pairing_notify(self, cb):
+        await self.transport.listen(cb)
+        return self.transport.stop_listening
+
 
 class _NonceReuseService(_ServiceBase, _protocol_service.AbstractFastPairService):
     async def read_model_id_characteristic(self) -> int:
         return self.device.model_id
-
-    async def on_key_based_pairing_notify(self, cb):
-        raise NotImplementedError("Notifications are not used by this test")
 
     async def write_passkey(self, data: bytes) -> None:
         raise NotImplementedError
