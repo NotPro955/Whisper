@@ -10,6 +10,7 @@ from .fastpair.capabilities import (
     detect_capabilities,
 )
 from .fastpair.gatt import GattClient
+from .fastpair.authorized_service import AuthorizedFastPairService
 from .fastpair.scanner import scan
 from .speech.recorder import record
 
@@ -239,6 +240,68 @@ async def inspect_fast_pair(device) -> None:
 
         print()
         print("Fast Pair GATT connection closed.")
+
+
+async def run_authorized_protocol_test(device) -> None:
+    print_header("AUTHORIZED PROTOCOL TEST")
+    print("This operation writes test payloads to the selected BLE device.")
+    print("Run it only against hardware you own or are explicitly authorized to test.")
+    print("It does not write an account key.")
+    print()
+    print('Type exactly "I understand this writes test payloads to the authorized device" to continue.')
+
+    if input("> ").strip() != "I understand this writes test payloads to the authorized device":
+        print("Protocol test cancelled.")
+        return
+
+    client = GattClient(device.address)
+
+    try:
+        await client.connect()
+        services = await client.discover()
+        kbp_characteristic = next(
+            (
+                characteristic
+                for service in services
+                for characteristic in service.characteristics
+                if characteristic.uuid.lower() == KEY_BASED_PAIRING_UUID.lower()
+            ),
+            None,
+        )
+
+        if kbp_characteristic is None:
+            print("KBP characteristic was not found.")
+            return
+
+        properties = tuple(prop.lower() for prop in kbp_characteristic.properties)
+        if not {"write", "write-without-response"}.intersection(properties):
+            print("KBP characteristic is not writable.")
+            return
+
+        service = AuthorizedFastPairService(client, properties)
+        print()
+        print("1. Test invalid-curve handling")
+        print("2. Test nonce reuse handling")
+        print("q. Cancel")
+        choice = input("> ").strip().lower()
+
+        if choice == "1":
+            await service.test_invalid_curve(
+                device.address,
+                device.model_id,
+            )
+        elif choice == "2":
+            result = await service.test_nonce_reuse(
+                device.address,
+                device.model_id,
+            )
+            print(f"Nonce reuse test finished: {result}")
+        else:
+            print("Protocol test cancelled.")
+    finally:
+        if client.connected:
+            await client.disconnect()
+        print("Protocol test connection closed.")
 
 
 async def connect_bluetooth(device) -> bool:
@@ -586,6 +649,8 @@ async def async_main() -> None:
         print(
             "Fast Pair inspection could not be completed."
         )
+
+    await run_authorized_protocol_test(selected)
 
     bluetooth_connected = await establish_bluetooth_audio_connection(
         selected
