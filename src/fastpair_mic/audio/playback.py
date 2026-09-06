@@ -9,7 +9,7 @@ import numpy as np
 
 try:
     import sounddevice as sd
-except OSError:
+except (ImportError, OSError):
     sd = None
 
 
