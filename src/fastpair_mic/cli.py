@@ -684,7 +684,23 @@ async def async_main() -> None:
         print("The normal Bluetooth output was not available for local audio playback.")
         return
 
-    await record_bluetooth_microphone(source)
+    recording_path = await record_bluetooth_microphone(source)
+    if recording_path is None:
+        print()
+        print_header("TRANSCRIPTION SKIPPED")
+        print("No recording was produced, so Whisper transcription was not run.")
+        return
+
+    print_header("WHISPER TRANSCRIPTION")
+    try:
+        from .speech.transcriber import transcribe_audio
+
+        transcript = transcribe_audio(recording_path)
+        print(f"Transcript: {transcript}")
+    except Exception as exc:
+        print()
+        print_header("WHISPER ERROR")
+        print(str(exc))
 
 
 def main() -> None:
