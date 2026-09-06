@@ -1,0 +1,499 @@
+Whisper Pair — Controlled Bluetooth/Fast Pair Security Demonstration
+Project objective
+
+Build a Python application called Whisper Pair that demonstrates, in a controlled and authorized environment, the relationship between:
+
+Bluetooth/Fast Pair discovery
+Fast Pair GATT inspection
+Fast Pair security-surface analysis
+Explicit connection to a user-selected Bluetooth target
+forced BR/EDR Bluetooth pairing/connection (authorized)
+Bluetooth audio profile detection
+PipeWire microphone access
+Audio recording
+Eventually, Whisper speech transcription
+
+The application should feel like a complete end-to-end security demonstration rather than merely a vulnerability scanner.
+
+The user will test only devices they own or have explicit permission to test.
+
+Core safety and interaction requirements
+
+The application must never silently connect to arbitrary nearby devices.
+
+The flow must always be:
+
+BLE discovery
+    ↓
+Display discovered devices
+    ↓
+User selects one device
+    ↓
+Display target identity/address
+    ↓
+Explicit authorization warning
+    ↓
+User must type exactly:
+I accept
+    ↓
+Only then may the application connect to that selected target
+
+
+Device addresses and Model IDs must never be hard-coded.
+
+The selected device address must come from the current discovery result.
+
+The application must not automatically iterate through or connect to all discovered devices.
+
+Important architectural distinction
+
+Fast Pair and normal Bluetooth audio are separate layers.
+
+Use Fast Pair primarily for:
+
+BLE advertisement discovery
+Model ID identification
+Fast Pair capability detection
+GATT discovery
+KBP characteristic inspection
+security-surface assessment
+
+Use the normal Bluetooth stack for:
+
+BR/EDR connection
+normal user-authorized Bluetooth pairing
+Bluetooth audio profiles
+PipeWire audio
+microphone recording
+
+Do not assume that Fast Pair KBP is required for ordinary Bluetooth audio once the device has been normally paired/connected.
+
+Desired end-to-end flow
+
+The final demonstration should approximately behave as follows:
+
+                    WHISPER PAIR
+                         │
+                         ▼
+                 Fast Pair BLE scan
+                         │
+                         ▼
+                  Display devices
+                         │
+                         ▼
+                  User selects target
+                         │
+                         ▼
+                 Authorization warning
+                         │
+                         ▼
+                    "I accept"
+                         │
+                         ▼
+              Connect to selected target
+                         │
+             ┌───────────┴────────────┐
+             │                        │
+             ▼                        ▼
+       Fast Pair layer          Bluetooth layer
+             │                        │
+       GATT discovery           BR/EDR connection
+             │                        │
+       Capability detection      Pairing if needed
+             │                        │
+       KBP inspection                │
+             │                        ▼
+       Security assessment       Audio profiles
+             │                        │
+             └───────────┬────────────┘
+                         ▼
+                      PipeWire
+                         │
+                         ▼
+               Bluetooth microphone
+                         │
+                         ▼
+                     Recording
+                         │
+                         ▼
+                  Whisper transcription
+
+Target connection requirement
+
+The application must actually connect to the selected target, not merely inspect it and disconnect.
+
+Connection behavior should be explicit and visible to the user:
+
+Target selected:
+  Device: Example Earbuds
+  Address: XX:XX:XX:XX:XX:XX
+
+Connecting to selected target...
+Connected.
+
+
+The connection layer must use the dynamically selected Bluetooth address.
+
+For normal Bluetooth operation, use the existing BlueZ abstraction.
+
+The BlueZ layer should support operations such as:
+
+power_on()
+show()
+list_controllers()
+connect(address)
+
+
+The pairing abstraction should remain separate and support normal user-authorized operations such as:
+
+pair(address)
+trust(address)
+remove(address)
+
+
+Do not mix normal Bluetooth pairing logic into the Fast Pair KBP protocol implementation.
+
+Fast Pair layer
+
+The Fast Pair layer should remain generic and manufacturer-independent.
+
+It should support:
+
+Fast Pair advertisement
+    ↓
+FE2C service data
+    ↓
+Model ID
+    ↓
+GATT connection
+    ↓
+GATT service discovery
+    ↓
+Fast Pair characteristic detection
+
+
+Known Fast Pair characteristics may include:
+
+Model ID
+Key-Based Pairing
+Passkey
+Account Key
+
+The application may report whether these characteristics are exposed.
+
+Example:
+
+FAST PAIR INSPECTION
+------------------------------------------------------------
+
+Fast Pair service:       YES
+Model ID characteristic: YES
+Key-Based Pairing:       YES
+Passkey:                 YES
+Account Key:             YES
+
+KBP characteristic:
+  UUID:          ...
+  Writable:      YES
+  Notifications: YES
+
+Security assessment
+
+Security inspection must be clearly distinguished from proof of vulnerability.
+
+For example:
+
+SECURITY ASSESSMENT
+------------------------------------------------------------
+
+Fast Pair KBP surface: EXPOSED
+
+This indicates that the device exposes a Fast Pair
+Key-Based Pairing security surface.
+
+Exposure alone does not prove that the device is vulnerable.
+
+Assessment performed:
+  GATT capability inspection
+  Protocol metadata inspection
+  Non-destructive testing
+
+Authentication bypass:
+  NOT PERFORMED
+
+Account-key modification:
+  NOT PERFORMED
+
+
+Do not describe characteristic exposure as a confirmed exploit.
+
+Security inspection should be non-destructive.
+
+KBP implementation boundary
+
+The project may contain Fast Pair KBP transport and protocol-analysis code for educational purposes.
+
+KBP transport may support:
+
+notification handling
+indication handling
+characteristic capability detection
+GATT writes
+parsing protocol responses where appropriate
+documenting protocol structures
+
+However, do not implement:
+
+authentication bypasses
+credential theft
+account-key extraction
+account-key injection/modification
+persistent unauthorized access
+covert access to a device
+exploit payloads intended to defeat authentication
+
+The application should remain generic rather than being written specifically for one manufacturer.
+
+Bluetooth audio layer
+
+After the selected target has been legitimately connected through the normal Bluetooth stack, determine whether the system exposes Bluetooth audio.
+
+Use:
+
+BlueZ
+  ↓
+Bluetooth audio profile
+  ↓
+PipeWire
+
+
+Known profile categories include:
+
+A2DP
+HFP
+HSP
+LE Audio
+
+UUID inspection can indicate potential capabilities, but PipeWire state is more authoritative for actual audio availability.
+
+The application should be able to inspect PipeWire sources and identify Bluetooth microphone sources such as:
+
+bluez_input.*
+
+
+Do not assume that the presence of a UUID guarantees a working microphone.
+
+Recording
+
+The existing microphone recorder is already hardware-tested and working.
+
+It should:
+
+discover an appropriate Bluetooth microphone source through PipeWire/PulseAudio compatibility;
+launch parecord;
+continuously record;
+allow the user to type q to stop;
+save a WAV file;
+create recordings/ when necessary.
+
+Recording should only occur after the user has explicitly authorized the selected target.
+
+Example:
+
+BLUETOOTH MICROPHONE
+------------------------------------------------------------
+
+Target microphone detected.
+
+Source:
+  bluez_input....
+
+Recording started.
+
+Type q and press Enter to stop.
+
+Whisper transcription
+
+After recording is confirmed working, integrate Whisper transcription as a separate layer.
+
+The intended flow is:
+
+Bluetooth microphone
+        ↓
+PipeWire
+        ↓
+parecord
+        ↓
+WAV
+        ↓
+Whisper
+        ↓
+Transcript
+
+
+Do not mix transcription logic into the Bluetooth or Fast Pair layers.
+
+Existing project structure
+
+Project directory:
+
+~/fastpair-mic
+
+
+Python package:
+
+src/fastpair_mic/
+
+
+Current structure:
+
+fastpair-mic/
+├── config/
+│   └── config.toml
+├── assets/
+│   └── audio/
+├── recordings/
+├── scripts/
+│   ├── install_arch.sh
+│   └── check_system.sh
+├── src/
+│   └── fastpair_mic/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py
+│       ├── fastpair/
+│       │   ├── __init__.py
+│       │   ├── scanner.py
+│       │   ├── advertisement.py
+│       │   ├── model_id.py
+│       │   ├── nearby_api.py
+│       │   ├── gatt.py
+│       │   ├── capabilities.py
+│       │   ├── inspector.py
+│       │   ├── kbp.py
+│       │   └── crypto.py
+│       ├── bluetooth/
+│       │   ├── __init__.py
+│       │   ├── bluez.py
+│       │   ├── pairing.py
+│       │   ├── device.py
+│       │   └── profiles.py
+│       ├── audio/
+│       │   ├── __init__.py
+│       │   ├── pipewire.py
+│       │   ├── devices.py
+│       │   ├── playback.py
+│       │   ├── microphone.py
+│       │   └── monitor.py
+│       ├── speech/
+│       │   ├── __init__.py
+│       │   ├── recorder.py
+│       │   ├── transcriber.py
+│       │   └── tts.py
+│       ├── ui/
+│       │   ├── __init__.py
+│       │   ├── menu.py
+│       │   └── display.py
+│       └── utils/
+│           ├── __init__.py
+│           ├── config.py
+│           ├── logging.py
+│           └── errors.py
+├── tests/
+├── pyproject.toml
+├── requirements.txt
+├── README.md
+└── .gitignore
+
+
+Do not change the project layout.
+
+Do not assume an empty file needs implementation.
+
+Do not assume an existing file is complete unless it has been explicitly tested.
+
+Current confirmed components
+
+The Fast Pair advertisement parser is working.
+
+The Fast Pair scanner is working.
+
+The scanner dynamically discovers devices and Model IDs.
+
+The BlueZ wrapper has been tested.
+
+The normal Bluetooth pairing abstraction exists.
+
+The GATT discovery implementation exists.
+
+Fast Pair capability detection exists and has been tested.
+
+The GATT inspection flow exists.
+
+The KBP implementation currently acts as a GATT transport and must remain non-exploitative.
+
+PipeWire discovery exists.
+
+Bluetooth audio capability detection exists.
+
+The microphone recorder has been hardware-tested and confirmed working.
+
+The existing recorder can be tested with:
+
+python -c "import asyncio; from fastpair_mic.speech.recorder import record; print(asyncio.run(record('recordings/test.wav')))"
+
+Development methodology
+
+Work incrementally.
+
+For every change:
+
+Identify the exact file that needs modification.
+Ask for the current file contents if they have not been provided.
+Do not blindly replace unknown existing files.
+Preserve working functionality.
+Make the smallest appropriate change.
+Give the exact test command.
+Wait for confirmation that the test passed.
+Only then move to the next component.
+
+Do not silently modify unrelated files.
+
+When giving shell commands, assume:
+
+cd ~/fastpair-mic
+source .venv/bin/activate
+
+
+may be required.
+
+Use pytest -v for development tests when appropriate.
+
+Immediate development priority
+
+The immediate priority is to make the end-to-end authorized demonstration work:
+
+Fast Pair scan
+    ↓
+Target selection
+    ↓
+Explicit "I accept" authorization
+    ↓
+Connect to selected target
+    ↓
+GATT / Fast Pair inspection
+    ↓
+Security-surface assessment
+    ↓
+Normal Bluetooth/BR-EDR connection state
+    ↓
+PipeWire Bluetooth microphone detection
+    ↓
+Record WAV
+    ↓
+Later: Whisper transcription
+
+
+The application must make it obvious which operations belong to Fast Pair security inspection and which belong to normal Bluetooth audio.
+
+The project should demonstrate the complete workflow without claiming that security-surface exposure automatically means a device is vulnerable.

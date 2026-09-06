@@ -1,0 +1,5 @@
+bleak
+cryptography
+dbus-next
+numpy
+sounddevice
